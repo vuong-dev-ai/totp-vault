@@ -278,6 +278,46 @@
     const emptyEl  = document.getElementById('emptyState');
     const countEl  = document.getElementById('countBadge');
 
+    // Search state (set by init's input handler)
+    let searchQuery = '';
+
+    function applySearch() {
+        const q = searchQuery.toLowerCase().trim();
+        let visibleCount = 0;
+
+        const allItemEls = listEl.querySelectorAll('.totp-item');
+        allItemEls.forEach(itemEl => {
+            const id = itemEl.dataset.id;
+            const item = items.find(it => it.id === id);
+            if (!item) return;
+
+            let matches = !q;
+            if (q) {
+                const haystack = [
+                    item.note || '',
+                    TYPES[item.type]?.label || '',
+                    item.type || ''
+                ].join(' ').toLowerCase();
+                matches = haystack.includes(q);
+            }
+
+            itemEl.hidden = !matches;
+            if (matches) visibleCount++;
+        });
+
+        const searchBox    = document.getElementById('searchBox');
+        const noResults    = document.getElementById('noResultsState');
+        const noResultsQ   = document.getElementById('noResultsQuery');
+
+        if (searchBox) searchBox.hidden = items.length === 0;
+
+        if (noResults) {
+            const showNoResults = items.length > 0 && q && visibleCount === 0;
+            noResults.hidden = !showNoResults;
+            if (showNoResults && noResultsQ) noResultsQ.textContent = `"${searchQuery}"`;
+        }
+    }
+
     function itemHtml(it) {
         const t = TYPES[it.type] || TYPES.other;
         const hasNote = !!it.note;
@@ -335,12 +375,14 @@
             listEl.innerHTML = '';
             emptyEl.hidden = false;
             countEl.textContent = '0';
+            applySearch();
             return;
         }
         emptyEl.hidden = true;
         countEl.textContent = String(items.length);
         listEl.innerHTML = items.map(itemHtml).join('');
         updateAllCodes(true);
+        applySearch();
     }
 
     // Partial: update note display in-place
@@ -479,6 +521,7 @@
         item.note = trimmed;
         saveItems();
         refreshItemNote(id);
+        applySearch();
 
         // close form
         const form = root.querySelector('[data-role="note-form"]');
@@ -501,6 +544,8 @@
         const notePreview     = document.getElementById('notePreview');
         const notePreviewText = document.getElementById('notePreviewText');
         const clearNoteBtn    = document.getElementById('clearNoteBtn');
+        const searchInput     = document.getElementById('searchInput');
+        const searchClearBtn  = document.getElementById('searchClearBtn');
 
         let pendingNote = '';
 
@@ -524,6 +569,33 @@
                 b.classList.toggle('is-active', b.dataset.type === type);
             });
         }
+
+        function resetSearch() {
+            searchInput.value = '';
+            searchQuery = '';
+            searchClearBtn.hidden = true;
+            applySearch();
+        }
+
+        // Search input
+        searchInput.addEventListener('input', () => {
+            searchQuery = searchInput.value;
+            searchClearBtn.hidden = !searchQuery;
+            applySearch();
+        });
+
+        searchClearBtn.addEventListener('click', () => {
+            resetSearch();
+            searchInput.focus();
+        });
+
+        // ESC trong search input để clear nhanh
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && searchInput.value) {
+                e.preventDefault();
+                resetSearch();
+            }
+        });
 
         // Khi giá trị input có dấu phân cách, email, hoặc nhiều space → tự parse
         function maybeAutoParse() {
@@ -615,6 +687,7 @@
             // reset form
             secretInput.value = '';
             setPendingNote('');
+            resetSearch();
             secretInput.focus();
         });
 

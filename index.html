@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="assets/css/main.css?v=5.3.0">
+    <link rel="stylesheet" href="assets/css/main.css?v=5.4.0">
 </head>
 <body>
 
@@ -120,7 +120,29 @@
                     <span class="totp-section__count" id="countBadge">0</span>
                 </div>
 
+                <div class="totp-search" id="searchBox" hidden>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.3-4.3"></path>
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="Tìm theo note hoặc loại..." autocomplete="off" spellcheck="false">
+                    <button type="button" id="searchClearBtn" aria-label="Xóa tìm kiếm" hidden>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+
                 <div class="totp-list" id="list"></div>
+
+                <div class="totp-no-results" id="noResultsState" hidden>
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.3-4.3"></path>
+                    </svg>
+                    <p>Không có 2FA nào khớp với <strong id="noResultsQuery"></strong></p>
+                </div>
 
                 <div class="totp-empty" id="emptyState">
                     <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4">
@@ -137,6 +159,6 @@
     <div class="totp-toast" id="toast" hidden></div>
 </main>
 
-<script src="assets/js/totp-generator.js?v=5.3.0"></script>
+<script src="assets/js/totp-generator.js?v=5.4.0"></script>
 </body>
 </html>
