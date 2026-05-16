@@ -280,16 +280,13 @@
 
     function itemHtml(it) {
         const t = TYPES[it.type] || TYPES.other;
-        const noteHtml = it.note
-            ? `<div class="totp-item__note" data-role="note">${esc(it.note)}</div>`
-            : '';
+        const hasNote = !!it.note;
         return `
             <div class="totp-item" data-id="${esc(it.id)}">
                 <div class="totp-item__head">
                     <div class="totp-item__icon totp-item__icon--${esc(it.type)}">${t.svg}</div>
                     <div class="totp-item__title">
                         <span class="totp-item__name">${esc(t.label)}</span>
-                        ${noteHtml}
                     </div>
                     <button type="button" class="totp-item-btn totp-item-btn--delete" data-role="delete" aria-label="Xóa">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
@@ -311,8 +308,20 @@
                     </div>
                 </div>
 
+                <div class="totp-item__note-display" data-role="note-display"${hasNote ? '' : ' hidden'}>
+                    <svg class="totp-item__note-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <span class="totp-item__note-text" data-role="note-text">${esc(it.note)}</span>
+                    <button type="button" class="totp-item-btn totp-item-btn--copy-note" data-role="copy-note" aria-label="Copy note">
+                        <svg class="icon-copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <svg class="icon-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </button>
+                </div>
+
                 <form class="totp-item__note-form" hidden data-role="note-form">
-                    <input type="text" class="totp-item__note-input" placeholder="Nhập note (bỏ trống để xóa)" value="${esc(it.note)}" maxlength="80" />
+                    <input type="text" class="totp-item__note-input" placeholder="Nhập note (bỏ trống để xóa)" value="${esc(it.note)}" maxlength="200" />
                     <button type="submit" class="totp-item__note-save">Lưu</button>
                 </form>
 
@@ -334,27 +343,25 @@
         updateAllCodes(true);
     }
 
-    // Partial: update note in-place without re-rendering whole list
+    // Partial: update note display in-place
     function refreshItemNote(id) {
         const item = items.find(it => it.id === id);
         if (!item) return;
         const root = listEl.querySelector(`.totp-item[data-id="${CSS.escape(id)}"]`);
         if (!root) return;
 
-        const titleEl = root.querySelector('.totp-item__title');
-        let noteEl = titleEl.querySelector('[data-role="note"]');
+        const display = root.querySelector('[data-role="note-display"]');
+        const textEl  = root.querySelector('[data-role="note-text"]');
+        const input   = root.querySelector('.totp-item__note-input');
 
         if (item.note) {
-            if (!noteEl) {
-                noteEl = document.createElement('div');
-                noteEl.className = 'totp-item__note';
-                noteEl.dataset.role = 'note';
-                titleEl.appendChild(noteEl);
-            }
-            noteEl.textContent = item.note;
-        } else if (noteEl) {
-            noteEl.remove();
+            textEl.textContent = item.note;
+            display.hidden = false;
+        } else {
+            textEl.textContent = '';
+            display.hidden = true;
         }
+        if (input) input.value = item.note || '';
     }
 
     // ==========================================================
@@ -432,6 +439,22 @@
             setTimeout(() => btn.classList.remove('is-copied'), 1300);
         }
         showToast(ok ? `Đã copy: ${raw}` : 'Copy thất bại', ok ? 'success' : 'error');
+    }
+
+    async function copyItemNote(id) {
+        const item = items.find(it => it.id === id);
+        if (!item || !item.note) return;
+
+        const ok = await copyToClipboard(item.note);
+        const root = listEl.querySelector(`.totp-item[data-id="${CSS.escape(id)}"]`);
+        if (root) {
+            const btn = root.querySelector('[data-role="copy-note"]');
+            if (btn) {
+                btn.classList.add('is-copied');
+                setTimeout(() => btn.classList.remove('is-copied'), 1300);
+            }
+        }
+        showToast(ok ? 'Đã copy note' : 'Copy thất bại', ok ? 'success' : 'error');
     }
 
     function toggleNoteForm(root) {
@@ -601,8 +624,9 @@
             if (!root) return;
             const id = root.dataset.id;
 
-            if (e.target.closest('[data-role="copy"]'))         copyItemCode(id);
-            else if (e.target.closest('[data-role="delete"]'))  { if (confirm('Xóa 2FA này?')) deleteItem(id); }
+            if (e.target.closest('[data-role="copy-note"]'))         copyItemNote(id);
+            else if (e.target.closest('[data-role="copy"]'))         copyItemCode(id);
+            else if (e.target.closest('[data-role="delete"]'))       { if (confirm('Xóa 2FA này?')) deleteItem(id); }
             else if (e.target.closest('[data-role="note-toggle"]')) toggleNoteForm(root);
         });
 
