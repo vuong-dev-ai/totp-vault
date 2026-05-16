@@ -205,37 +205,69 @@
 
     // ==========================================================
     // SMART PARSE: tự tách secret + note từ chuỗi paste
+    // Hỗ trợ nhiều format:
+    //   - Dính liền:  SECRETemail@gmail.compass@
+    //   - Dấu |:      email|pass|secret
+    //   - Cách nhiều khoảng trắng, xuống dòng, tab
+    //   - Bao bởi dấu nháy
+    // Chiến lược: tìm SECRET trước (Base32 chuẩn), rồi mới
+    // extract email từ phần còn lại. Tránh case email greedy
+    // ăn cả secret khi không có separator.
     // ==========================================================
-    function isValidBase32Part(s) {
-        const cleaned = s.replace(/\s+/g, '').replace(/=+$/, '').toUpperCase();
-        return cleaned.length >= 16 && /^[A-Z2-7]+$/.test(cleaned);
-    }
-
     function parseSmartInput(raw) {
-        const parts = raw.split(/[|\n\t;]/).map(s => s.trim()).filter(Boolean);
-        if (parts.length <= 1) return null;
+        let text = String(raw).trim();
+        text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
+        if (!text) return null;
 
-        const candidates = parts.filter(isValidBase32Part);
-        let secret;
-        if (candidates.length >= 1) {
-            // ưu tiên chuỗi base32 dài nhất
-            candidates.sort((a, b) =>
-                b.replace(/\s+/g, '').length - a.replace(/\s+/g, '').length
-            );
-            secret = candidates[0];
+        let secret = null;
+        let workText = text;
+
+        // 1a. Formatted: 4+ nhóm Base32 4 ký tự cách bởi space/tab
+        //     (kiểu "abcd efgh ijkl ..." Google Authenticator display)
+        let m = workText.match(/[A-Za-z2-7]{4}(?:[ \t]+[A-Za-z2-7]{4}){3,}/);
+        if (m) {
+            secret = m[0];
         } else {
-            secret = parts[0];
+            // 1b. Uppercase Base32 ≥16 ký tự liền (Google/GitHub raw style)
+            m = workText.match(/[A-Z2-7]{16,}/);
+            if (m) {
+                secret = m[0];
+            } else {
+                // 1c. Fallback: bất kỳ Base32 ≥16 ký tự (lấy dài nhất)
+                const all = [...workText.matchAll(/[A-Za-z2-7]{16,}/g)];
+                if (all.length > 0) {
+                    all.sort((a, b) => b[0].length - a[0].length);
+                    secret = all[0][0];
+                }
+            }
         }
-        const note = parts.filter(p => p !== secret).join(' · ');
-        return { secret, note };
+
+        if (secret) workText = workText.replace(secret, '\n');
+
+        // 2. Extract email từ phần còn lại
+        //    [a-z]{2,} cho TLD để tránh ăn nhầm chữ in hoa liền sau
+        const emailRegex = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/g;
+        const emails = workText.match(emailRegex) || [];
+        workText = workText.replace(emailRegex, '\n');
+
+        // 3. Phần còn lại tách theo separator hoặc nhiều space liên tiếp
+        const otherParts = workText
+            .split(/[|\n\t;]+|[ ]{2,}/)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+        return {
+            secret: secret || '',
+            note: [...emails, ...otherParts].join(' · ')
+        };
     }
 
     function detectType(text) {
         const lower = String(text).toLowerCase();
-        if (/\bgmail\b|google\.com|\bgoogle\b/.test(lower))   return 'google';
-        if (/github/.test(lower))                              return 'github';
-        if (/discord/.test(lower))                             return 'discord';
-        if (/chatgpt|openai/.test(lower))                      return 'chatgpt';
+        if (/@gmail\.com|@googlemail|\bgoogle\b/.test(lower))  return 'google';
+        if (/github/.test(lower))                                return 'github';
+        if (/discord/.test(lower))                               return 'discord';
+        if (/chatgpt|openai/.test(lower))                        return 'chatgpt';
         return null;
     }
 
@@ -470,12 +502,14 @@
             });
         }
 
-        // Khi giá trị input có dấu phân cách → tự parse
+        // Khi giá trị input có dấu phân cách, email, hoặc nhiều space → tự parse
         function maybeAutoParse() {
             const val = secretInput.value;
-            if (!/[|\n\t;]/.test(val)) return;
+            // Trigger nếu có: |, \n, \t, ;, @ (email), hoặc 2+ space liên tiếp
+            if (!/[|\n\t;@]|[ ]{2,}/.test(val)) return;
             const parsed = parseSmartInput(val);
-            if (!parsed) return;
+            if (!parsed || !parsed.secret) return;
+            // Chỉ apply nếu parse ra secret hợp lệ
             secretInput.value = parsed.secret;
             setPendingNote(parsed.note);
             const detected = detectType(parsed.note + ' ' + parsed.secret);
@@ -492,10 +526,9 @@
         // Paste vào input → parse sau khi browser đã chèn text
         secretInput.addEventListener('paste', () => setTimeout(maybeAutoParse, 0));
 
-        // Input event để bắt cả trường hợp gõ tay có `|`
+        // Input event để bắt cả gõ tay có delimiter / email / nhiều space
         secretInput.addEventListener('input', () => {
-            // chỉ parse nếu có delimiter, để khỏi cản người gõ thường
-            if (/[|\n\t;]/.test(secretInput.value)) maybeAutoParse();
+            if (/[|\n\t;@]|[ ]{2,}/.test(secretInput.value)) maybeAutoParse();
         });
 
         // Nút × trên note preview → bỏ note
