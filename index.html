@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b0d12">
     <meta name="robots" content="noindex,nofollow">
-    <title>TOTP Vault — Tạo mã 2FA</title>
+    <title>TOTP Vault — Quản lý 2FA</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="assets/css/main.css?v=3.0.0">
+    <link rel="stylesheet" href="assets/css/main.css?v=5.0.0">
 </head>
 <body>
 
@@ -23,77 +23,107 @@
     </div>
 
     <div class="totp-stage__inner">
-        <div class="totp-card" data-digits="6" data-period="30">
 
-            <div class="totp-card__header">
-                <span class="totp-card__badge">
-                    <span class="totp-card__badge-dot"></span>
-                    Live · Client-side
-                </span>
-                <h1 class="totp-card__title">Tạo mã 2FA</h1>
-                <p class="totp-card__subtitle"></p>
-            </div>
+        <header class="totp-header">
+            <span class="totp-card__badge">
+                <span class="totp-card__badge-dot"></span>
+                Live · Client-side
+            </span>
+            <h1 class="totp-card__title">Quản lý 2FA</h1>
+            <p class="totp-card__subtitle">Dán secret, tự sinh mã, tự copy.</p>
+        </header>
 
-            <form class="totp-card__form" novalidate autocomplete="off">
-                <label class="totp-field">
-                    <span class="totp-field__label"></span>
-                    <div class="totp-field__wrap">
-                        <input
-                            type="password"
-                            class="totp-field__input"
-                            name="secret"
-                            autocomplete="off"
-                            spellcheck="false"
-                            placeholder="Nhập mã 2FA"
-                            required
-                            autofocus
-                        />
-                        <button type="button" class="totp-field__toggle" data-toggle="visibility" aria-label="Hiện/ẩn secret">
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                        </button>
-                        <button type="button" class="totp-field__toggle" data-toggle="paste" aria-label="Dán từ clipboard" title="Dán">
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                            </svg>
-                        </button>
+        <div class="totp-grid">
+
+            <section class="totp-card totp-card--form">
+                <h2 class="totp-card__section-title">Thêm 2FA mới</h2>
+
+                <form class="totp-form" id="addForm" novalidate autocomplete="off">
+
+                    <div class="totp-field">
+                        <span class="totp-field__label">Loại tài khoản</span>
+                        <div class="totp-type-picker" id="typePicker">
+                            <button type="button" class="totp-type is-active" data-type="google">
+                                <span class="totp-type__icon totp-type__icon--google">G</span>
+                                <span>Google</span>
+                            </button>
+                            <button type="button" class="totp-type" data-type="github">
+                                <span class="totp-type__icon totp-type__icon--github">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.1c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.3-3.2 0-.4-.6-1.6.1-3.4 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.8.2 3 .1 3.4.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+                                </span>
+                                <span>GitHub</span>
+                            </button>
+                            <button type="button" class="totp-type" data-type="chatgpt">
+                                <span class="totp-type__icon totp-type__icon--chatgpt">AI</span>
+                                <span>ChatGPT</span>
+                            </button>
+                            <button type="button" class="totp-type" data-type="discord">
+                                <span class="totp-type__icon totp-type__icon--discord">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.3.5a18 18 0 0 0-6.2 0L8.6 3a19.8 19.8 0 0 0-5 1.5C0 9.4-.6 14.3.2 19.1a20 20 0 0 0 6 3l1.2-1.7-2.4-1.1.5-.4a14 14 0 0 0 12 0l.5.4-2.4 1.1 1.2 1.7a20 20 0 0 0 6-3c1-5.5.2-10.3-2.5-14.7M8.5 16c-1.2 0-2.2-1.1-2.2-2.5S7.3 11 8.5 11s2.2 1.1 2.2 2.5S9.7 16 8.5 16m6.9 0c-1.2 0-2.2-1.1-2.2-2.5S14.3 11 15.4 11s2.2 1.1 2.2 2.5S16.6 16 15.4 16"/></svg>
+                                </span>
+                                <span>Discord</span>
+                            </button>
+                            <button type="button" class="totp-type" data-type="other">
+                                <span class="totp-type__icon totp-type__icon--other">?</span>
+                                <span>Khác</span>
+                            </button>
+                        </div>
                     </div>
-                </label>
-            </form>
 
-            <div class="totp-card__result" hidden>
-                <div class="totp-code" aria-live="polite">
-                    <span class="totp-code__digits">— — —   — — —</span>
-                    <button type="button" class="totp-code__copy" data-toggle="copy" aria-label="Sao chép mã">
-                        <svg class="icon-copy" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
-                        <svg class="icon-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
+                    <div class="totp-field">
+                        <span class="totp-field__label">Secret 2FA (Base32)</span>
+                        <div class="totp-field__wrap">
+                            <input
+                                type="text"
+                                class="totp-field__input"
+                                id="secretInput"
+                                autocomplete="off"
+                                spellcheck="false"
+                                placeholder="VD: JBSWY3DPEHPK3PXP..."
+                                required
+                                autofocus
+                            />
+                            <button type="button" class="totp-field__toggle" id="pasteBtn" aria-label="Dán từ clipboard" title="Dán">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="totp-btn-primary" id="submitBtn">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Thêm 2FA
                     </button>
+
+                    <div class="totp-card__error" id="errorBox" hidden></div>
+                </form>
+            </section>
+
+            <section class="totp-card totp-card--list">
+                <div class="totp-card__list-head">
+                    <h2 class="totp-card__section-title">Danh sách 2FA</h2>
+                    <span class="totp-section__count" id="countBadge">0</span>
                 </div>
 
-                <div class="totp-progress">
-                    <div class="totp-progress__track">
-                        <div class="totp-progress__fill"></div>
-                    </div>
-                    <div class="totp-progress__meta">
-                        <span>Mã mới sau</span>
-                        <span class="totp-progress__time">30s</span>
-                    </div>
-                </div>
-            </div>
+                <div class="totp-list" id="list"></div>
 
-            <div class="totp-card__error" role="alert" hidden></div>
+                <div class="totp-empty" id="emptyState">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <p>Chưa có 2FA nào.<br>Thêm cái đầu tiên ở bên trái.</p>
+                </div>
+            </section>
+
         </div>
     </div>
+
+    <div class="totp-toast" id="toast" hidden></div>
 </main>
 
-<script src="assets/js/totp-generator.js?v=3.0.0"></script>
+<script src="assets/js/totp-generator.js?v=5.0.0"></script>
 </body>
 </html>

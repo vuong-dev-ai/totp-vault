@@ -1,11 +1,12 @@
 /**
- * TOTP Vault — TOTP generator (v3 minimal)
- * RFC 6238 (HMAC-SHA1). Fallback SHA-1 thuần JS khi site không phải secure context.
- * Không lưu trữ. Không tracking. Không gửi secret về server.
+ * TOTP Vault v5 — Quản lý nhiều 2FA, note thêm sau qua nút "+"
  */
 (function () {
     'use strict';
 
+    // ==========================================================
+    // CRYPTO: Base32 + SHA-1 + HMAC + TOTP
+    // ==========================================================
     const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
     function base32Decode(input) {
@@ -102,154 +103,410 @@
         return hotp(key, counter, digits);
     }
 
-    // ==========================================================
-    // UI
-    // ==========================================================
-    function initCard(card) {
-        const digits = Math.max(6, Math.min(8, parseInt(card.dataset.digits, 10) || 6));
-        const period = Math.max(15, Math.min(120, parseInt(card.dataset.period, 10) || 30));
+    function formatCode(c) {
+        if (c.length === 6) return c.slice(0,3) + ' ' + c.slice(3);
+        if (c.length === 8) return c.slice(0,4) + ' ' + c.slice(4);
+        return c;
+    }
 
-        const form      = card.querySelector('.totp-card__form');
-        const input     = card.querySelector('.totp-field__input');
-        const toggleVis = card.querySelector('[data-toggle="visibility"]');
-        const pasteBtn  = card.querySelector('[data-toggle="paste"]');
-        const resultBox = card.querySelector('.totp-card__result');
-        const digitsEl  = card.querySelector('.totp-code__digits');
-        const copyBtn   = card.querySelector('[data-toggle="copy"]');
-        const progFill  = card.querySelector('.totp-progress__fill');
-        const progTime  = card.querySelector('.totp-progress__time');
-        const errorBox  = card.querySelector('.totp-card__error');
+    // ==========================================================
+    // TYPES (svg dùng cho icon trong list item)
+    // ==========================================================
+    const TYPES = {
+        google:  { label: 'Google',   svg: 'G' },
+        github:  { label: 'GitHub',   svg: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.1c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.3-3.2 0-.4-.6-1.6.1-3.4 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.8.2 3 .1 3.4.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>' },
+        chatgpt: { label: 'ChatGPT',  svg: 'AI' },
+        discord: { label: 'Discord',  svg: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.3.5a18 18 0 0 0-6.2 0L8.6 3a19.8 19.8 0 0 0-5 1.5C0 9.4-.6 14.3.2 19.1a20 20 0 0 0 6 3l1.2-1.7-2.4-1.1.5-.4a14 14 0 0 0 12 0l.5.4-2.4 1.1 1.2 1.7a20 20 0 0 0 6-3c1-5.5.2-10.3-2.5-14.7M8.5 16c-1.2 0-2.2-1.1-2.2-2.5S7.3 11 8.5 11s2.2 1.1 2.2 2.5S9.7 16 8.5 16m6.9 0c-1.2 0-2.2-1.1-2.2-2.5S14.3 11 15.4 11s2.2 1.1 2.2 2.5S16.6 16 15.4 16"/></svg>' },
+        other:   { label: 'Khác',     svg: '?' },
+    };
 
-        let currentSecret = null;
-        let ticker = null;
-        let debounceTimer = null;
+    // ==========================================================
+    // STORAGE
+    // ==========================================================
+    const STORAGE_KEY = 'totp-vault-items-v5';
+    const PERIOD = 30;
+    const DIGITS = 6;
+
+    let items = []; // {id, type, secret, note}
+    let selectedType = 'google';
+
+    function loadItems() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            items = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(items)) items = [];
+            // migrate: old 'label' -> 'note'
+            items = items.map(it => ({
+                id: it.id, type: it.type, secret: it.secret,
+                note: it.note ?? it.label ?? ''
+            }));
+        } catch { items = []; }
+    }
+
+    function saveItems() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+        catch (e) { console.warn('Lưu thất bại:', e); }
+    }
+
+    function genId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    // ==========================================================
+    // CLIPBOARD
+    // ==========================================================
+    async function copyToClipboard(text) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (_) {}
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return ok;
+        } catch (_) { return false; }
+    }
+
+    // ==========================================================
+    // TOAST
+    // ==========================================================
+    let toastTimer = null;
+    function showToast(msg, kind = 'success') {
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        toast.className = 'totp-toast is-' + kind;
+        const icon = kind === 'error'
+            ? '<svg class="totp-toast__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
+            : '<svg class="totp-toast__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        toast.innerHTML = icon + '<span>' + esc(msg) + '</span>';
+        toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { toast.hidden = true; }, 2400);
+    }
+
+    // ==========================================================
+    // ESCAPE
+    // ==========================================================
+    function esc(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // ==========================================================
+    // RENDER
+    // ==========================================================
+    const listEl   = document.getElementById('list');
+    const emptyEl  = document.getElementById('emptyState');
+    const countEl  = document.getElementById('countBadge');
+
+    function itemHtml(it) {
+        const t = TYPES[it.type] || TYPES.other;
+        const noteHtml = it.note
+            ? `<div class="totp-item__note" data-role="note">${esc(it.note)}</div>`
+            : '';
+        return `
+            <div class="totp-item" data-id="${esc(it.id)}">
+                <div class="totp-item__head">
+                    <div class="totp-item__icon totp-item__icon--${esc(it.type)}">${t.svg}</div>
+                    <div class="totp-item__title">
+                        <span class="totp-item__name">${esc(t.label)}</span>
+                        ${noteHtml}
+                    </div>
+                    <button type="button" class="totp-item-btn totp-item-btn--delete" data-role="delete" aria-label="Xóa">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+                    </button>
+                </div>
+
+                <div class="totp-item__secret">${esc(it.secret)}</div>
+
+                <div class="totp-item__code-row">
+                    <span class="totp-item__code" data-role="code">— — —   — — —</span>
+                    <div class="totp-item__actions">
+                        <button type="button" class="totp-item-btn totp-item-btn--copy" data-role="copy" aria-label="Copy mã">
+                            <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </button>
+                        <button type="button" class="totp-item-btn totp-item-btn--note" data-role="note-toggle" aria-label="Thêm/sửa note">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <form class="totp-item__note-form" hidden data-role="note-form">
+                    <input type="text" class="totp-item__note-input" placeholder="Nhập note (bỏ trống để xóa)" value="${esc(it.note)}" maxlength="80" />
+                    <button type="submit" class="totp-item__note-save">Lưu</button>
+                </form>
+
+                <div class="totp-item__progress"><div class="totp-item__progress-fill" data-role="prog"></div></div>
+            </div>
+        `;
+    }
+
+    function renderList() {
+        if (!items.length) {
+            listEl.innerHTML = '';
+            emptyEl.hidden = false;
+            countEl.textContent = '0';
+            return;
+        }
+        emptyEl.hidden = true;
+        countEl.textContent = String(items.length);
+        listEl.innerHTML = items.map(itemHtml).join('');
+        updateAllCodes(true);
+    }
+
+    // Partial: update note in-place without re-rendering whole list
+    function refreshItemNote(id) {
+        const item = items.find(it => it.id === id);
+        if (!item) return;
+        const root = listEl.querySelector(`.totp-item[data-id="${CSS.escape(id)}"]`);
+        if (!root) return;
+
+        const titleEl = root.querySelector('.totp-item__title');
+        let noteEl = titleEl.querySelector('[data-role="note"]');
+
+        if (item.note) {
+            if (!noteEl) {
+                noteEl = document.createElement('div');
+                noteEl.className = 'totp-item__note';
+                noteEl.dataset.role = 'note';
+                titleEl.appendChild(noteEl);
+            }
+            noteEl.textContent = item.note;
+        } else if (noteEl) {
+            noteEl.remove();
+        }
+    }
+
+    // ==========================================================
+    // TICKER
+    // ==========================================================
+    let masterTicker = null;
+    const lastCounters = new Map();
+
+    async function updateAllCodes(forceAll = false) {
+        const nowSec = Date.now() / 1000;
+        const counter = Math.floor(nowSec / PERIOD);
+        const rem = PERIOD - (nowSec % PERIOD);
+
+        for (const item of items) {
+            const root = listEl.querySelector(`.totp-item[data-id="${CSS.escape(item.id)}"]`);
+            if (!root) continue;
+
+            const codeEl = root.querySelector('[data-role="code"]');
+            const progEl = root.querySelector('[data-role="prog"]');
+
+            const lastC = lastCounters.get(item.id);
+            if (forceAll || lastC !== counter) {
+                try {
+                    const code = await totp(item.secret, PERIOD, DIGITS);
+                    codeEl.textContent = formatCode(code);
+                    codeEl.dataset.raw = code;
+                    lastCounters.set(item.id, counter);
+                    if (!forceAll) {
+                        codeEl.classList.remove('is-pulse');
+                        void codeEl.offsetWidth;
+                        codeEl.classList.add('is-pulse');
+                    }
+                } catch (_) {
+                    codeEl.textContent = '— lỗi —';
+                }
+            }
+
+            progEl.style.width = (rem / PERIOD * 100) + '%';
+            const warn = rem <= 5;
+            progEl.classList.toggle('is-warning', warn);
+            codeEl.classList.toggle('is-warning', warn);
+        }
+    }
+
+    function startTicker() {
+        stopTicker();
+        masterTicker = setInterval(() => updateAllCodes(false), 500);
+    }
+    function stopTicker() {
+        if (masterTicker) { clearInterval(masterTicker); masterTicker = null; }
+    }
+
+    // ==========================================================
+    // ACTIONS
+    // ==========================================================
+    function deleteItem(id) {
+        items = items.filter(it => it.id !== id);
+        lastCounters.delete(id);
+        saveItems();
+        renderList();
+        showToast('Đã xóa 2FA', 'success');
+    }
+
+    async function copyItemCode(id) {
+        const root = listEl.querySelector(`.totp-item[data-id="${CSS.escape(id)}"]`);
+        if (!root) return;
+        const codeEl = root.querySelector('[data-role="code"]');
+        const raw = codeEl?.dataset.raw;
+        if (!raw) return;
+
+        const ok = await copyToClipboard(raw);
+        const btn = root.querySelector('[data-role="copy"]');
+        if (btn) {
+            btn.classList.add('is-copied');
+            setTimeout(() => btn.classList.remove('is-copied'), 1300);
+        }
+        showToast(ok ? `Đã copy: ${raw}` : 'Copy thất bại', ok ? 'success' : 'error');
+    }
+
+    function toggleNoteForm(root) {
+        const form = root.querySelector('[data-role="note-form"]');
+        const btn  = root.querySelector('[data-role="note-toggle"]');
+        const willOpen = form.hidden;
+        form.hidden = !willOpen;
+        btn.classList.toggle('is-open', willOpen);
+        if (willOpen) {
+            const inp = form.querySelector('.totp-item__note-input');
+            inp.focus();
+            inp.select();
+        }
+    }
+
+    function saveNote(root, value) {
+        const id = root.dataset.id;
+        const item = items.find(it => it.id === id);
+        if (!item) return;
+
+        const trimmed = value.trim();
+        item.note = trimmed;
+        saveItems();
+        refreshItemNote(id);
+
+        // close form
+        const form = root.querySelector('[data-role="note-form"]');
+        const btn  = root.querySelector('[data-role="note-toggle"]');
+        form.hidden = true;
+        btn.classList.remove('is-open');
+
+        showToast(trimmed ? 'Đã lưu note' : 'Đã xóa note', 'success');
+    }
+
+    // ==========================================================
+    // INIT
+    // ==========================================================
+    function init() {
+        const form        = document.getElementById('addForm');
+        const secretInput = document.getElementById('secretInput');
+        const pasteBtn    = document.getElementById('pasteBtn');
+        const errorBox    = document.getElementById('errorBox');
+        const typePicker  = document.getElementById('typePicker');
 
         function showError(m) { errorBox.textContent = m; errorBox.hidden = false; }
         function clearError() { errorBox.hidden = true; errorBox.textContent = ''; }
-        function formatCode(c) {
-            if (c.length === 6) return c.slice(0,3) + '   ' + c.slice(3);
-            if (c.length === 8) return c.slice(0,4) + '   ' + c.slice(4);
-            return c;
-        }
 
-        async function generate(s) {
-            try {
-                const code = await totp(s, period, digits);
-                digitsEl.textContent = formatCode(code);
-                digitsEl.dataset.raw = code;
-                digitsEl.classList.remove('is-pulse');
-                void digitsEl.offsetWidth;
-                digitsEl.classList.add('is-pulse');
-            } catch (err) {
-                stopTick(); showError(err.message); resultBox.hidden = true;
-            }
-        }
-
-        function updateProgress() {
-            const now = Date.now()/1000;
-            const rem = period - (now % period);
-            progFill.style.width = (rem/period*100) + '%';
-            progTime.textContent = Math.ceil(rem) + 's';
-            progFill.classList.toggle('is-warning', rem <= 5);
-        }
-        function startTick() {
-            stopTick(); updateProgress();
-            let last = Math.floor(Date.now()/1000/period);
-            ticker = setInterval(() => {
-                updateProgress();
-                const nowC = Math.floor(Date.now()/1000/period);
-                if (nowC !== last) { last = nowC; if (currentSecret) generate(currentSecret); }
-            }, 500);
-        }
-        function stopTick() { if (ticker) { clearInterval(ticker); ticker = null; } }
-
-        async function useSecret(s) {
-            clearError();
-            if (!s) {
-                currentSecret = null;
-                resultBox.hidden = true;
-                stopTick();
-                return;
-            }
-            try { base32Decode(s); }
-            catch (err) {
-                currentSecret = null;
-                resultBox.hidden = true;
-                stopTick();
-                if (s.replace(/\s+/g,'').length >= 6) showError(err.message);
-                return;
-            }
-            currentSecret = s;
-            resultBox.hidden = false;
-            await generate(s);
-            startTick();
-        }
-
-        input.addEventListener('input', () => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => useSecret(input.value.trim()), 150);
+        // Type picker
+        typePicker.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-type]');
+            if (!btn) return;
+            typePicker.querySelectorAll('.totp-type').forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            selectedType = btn.dataset.type;
         });
 
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            clearTimeout(debounceTimer);
-            useSecret(input.value.trim());
-        });
-
-        toggleVis.addEventListener('click', () => {
-            input.type = input.type === 'password' ? 'text' : 'password';
-            toggleVis.classList.toggle('is-on', input.type === 'text');
-        });
-
-        // Paste button (tiện trên mobile)
+        // Paste
         pasteBtn.addEventListener('click', async () => {
             try {
                 if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
                     const text = await navigator.clipboard.readText();
-                    input.value = text.trim();
-                    input.dispatchEvent(new Event('input'));
+                    secretInput.value = text.trim();
+                    secretInput.focus();
                     return;
                 }
             } catch (_) {}
-            // Fallback: focus input để user có thể paste thủ công
-            input.focus();
+            secretInput.focus();
         });
 
-        copyBtn.addEventListener('click', async () => {
-            const raw = digitsEl.dataset.raw; if (!raw) return;
-            let ok = false;
+        // Submit add
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearError();
+
+            const secret = secretInput.value.trim();
+            if (!secret) { showError('Hãy nhập secret 2FA.'); return; }
+
+            let code;
             try {
-                if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
-                    await navigator.clipboard.writeText(raw);
-                    ok = true;
-                }
-            } catch (_) {}
-            if (!ok) {
-                const ta = document.createElement('textarea');
-                ta.value = raw;
-                ta.setAttribute('readonly', '');
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                ta.setSelectionRange(0, raw.length);
-                try { document.execCommand('copy'); } catch (_) {}
-                document.body.removeChild(ta);
+                base32Decode(secret);
+                code = await totp(secret, PERIOD, DIGITS);
+            } catch (err) {
+                showError(err.message || 'Secret không hợp lệ.');
+                return;
             }
-            copyBtn.classList.add('is-copied');
-            setTimeout(() => copyBtn.classList.remove('is-copied'), 1300);
+
+            const item = { id: genId(), type: selectedType, secret, note: '' };
+            items.push(item);
+            saveItems();
+            renderList();
+
+            // auto-copy mã hiện tại 1 lần
+            const ok = await copyToClipboard(code);
+            showToast(
+                ok ? `Đã thêm + copy mã: ${code}` : `Đã thêm (copy thất bại): ${code}`,
+                ok ? 'success' : 'error'
+            );
+
+            // highlight nút copy của item mới
+            const newRoot = listEl.querySelector(`.totp-item[data-id="${CSS.escape(item.id)}"]`);
+            if (newRoot) {
+                const btn = newRoot.querySelector('[data-role="copy"]');
+                if (btn) {
+                    btn.classList.add('is-copied');
+                    setTimeout(() => btn.classList.remove('is-copied'), 1300);
+                }
+            }
+
+            secretInput.value = '';
+            secretInput.focus();
         });
 
-        window.addEventListener('beforeunload', stopTick);
-    }
+        // List click delegation
+        listEl.addEventListener('click', (e) => {
+            const root = e.target.closest('.totp-item');
+            if (!root) return;
+            const id = root.dataset.id;
 
-    function boot() {
-        document.querySelectorAll('.totp-card').forEach(initCard);
+            if (e.target.closest('[data-role="copy"]'))         copyItemCode(id);
+            else if (e.target.closest('[data-role="delete"]'))  { if (confirm('Xóa 2FA này?')) deleteItem(id); }
+            else if (e.target.closest('[data-role="note-toggle"]')) toggleNoteForm(root);
+        });
+
+        // List submit delegation (note form)
+        listEl.addEventListener('submit', (e) => {
+            const noteForm = e.target.closest('[data-role="note-form"]');
+            if (!noteForm) return;
+            e.preventDefault();
+            const root = noteForm.closest('.totp-item');
+            const input = noteForm.querySelector('.totp-item__note-input');
+            saveNote(root, input.value);
+        });
+
+        // Boot
+        loadItems();
+        renderList();
+        startTicker();
+        window.addEventListener('beforeunload', stopTicker);
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        boot();
+        init();
     }
 })();
