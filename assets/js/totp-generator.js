@@ -204,6 +204,42 @@
     }
 
     // ==========================================================
+    // SMART PARSE: tự tách secret + note từ chuỗi paste
+    // ==========================================================
+    function isValidBase32Part(s) {
+        const cleaned = s.replace(/\s+/g, '').replace(/=+$/, '').toUpperCase();
+        return cleaned.length >= 16 && /^[A-Z2-7]+$/.test(cleaned);
+    }
+
+    function parseSmartInput(raw) {
+        const parts = raw.split(/[|\n\t;]/).map(s => s.trim()).filter(Boolean);
+        if (parts.length <= 1) return null;
+
+        const candidates = parts.filter(isValidBase32Part);
+        let secret;
+        if (candidates.length >= 1) {
+            // ưu tiên chuỗi base32 dài nhất
+            candidates.sort((a, b) =>
+                b.replace(/\s+/g, '').length - a.replace(/\s+/g, '').length
+            );
+            secret = candidates[0];
+        } else {
+            secret = parts[0];
+        }
+        const note = parts.filter(p => p !== secret).join(' · ');
+        return { secret, note };
+    }
+
+    function detectType(text) {
+        const lower = String(text).toLowerCase();
+        if (/\bgmail\b|google\.com|\bgoogle\b/.test(lower))   return 'google';
+        if (/github/.test(lower))                              return 'github';
+        if (/discord/.test(lower))                             return 'discord';
+        if (/chatgpt|openai/.test(lower))                      return 'chatgpt';
+        return null;
+    }
+
+    // ==========================================================
     // RENDER
     // ==========================================================
     const listEl   = document.getElementById('list');
@@ -407,25 +443,71 @@
         const pasteBtn    = document.getElementById('pasteBtn');
         const errorBox    = document.getElementById('errorBox');
         const typePicker  = document.getElementById('typePicker');
+        const notePreview     = document.getElementById('notePreview');
+        const notePreviewText = document.getElementById('notePreviewText');
+        const clearNoteBtn    = document.getElementById('clearNoteBtn');
+
+        let pendingNote = '';
 
         function showError(m) { errorBox.textContent = m; errorBox.hidden = false; }
         function clearError() { errorBox.hidden = true; errorBox.textContent = ''; }
+
+        function setPendingNote(note) {
+            pendingNote = note || '';
+            if (pendingNote) {
+                notePreviewText.textContent = pendingNote;
+                notePreview.hidden = false;
+            } else {
+                notePreview.hidden = true;
+            }
+        }
+
+        function selectType(type) {
+            if (!TYPES[type]) return;
+            selectedType = type;
+            typePicker.querySelectorAll('.totp-type').forEach(b => {
+                b.classList.toggle('is-active', b.dataset.type === type);
+            });
+        }
+
+        // Khi giá trị input có dấu phân cách → tự parse
+        function maybeAutoParse() {
+            const val = secretInput.value;
+            if (!/[|\n\t;]/.test(val)) return;
+            const parsed = parseSmartInput(val);
+            if (!parsed) return;
+            secretInput.value = parsed.secret;
+            setPendingNote(parsed.note);
+            const detected = detectType(parsed.note + ' ' + parsed.secret);
+            if (detected) selectType(detected);
+        }
 
         // Type picker
         typePicker.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-type]');
             if (!btn) return;
-            typePicker.querySelectorAll('.totp-type').forEach(b => b.classList.remove('is-active'));
-            btn.classList.add('is-active');
-            selectedType = btn.dataset.type;
+            selectType(btn.dataset.type);
         });
 
-        // Paste
+        // Paste vào input → parse sau khi browser đã chèn text
+        secretInput.addEventListener('paste', () => setTimeout(maybeAutoParse, 0));
+
+        // Input event để bắt cả trường hợp gõ tay có `|`
+        secretInput.addEventListener('input', () => {
+            // chỉ parse nếu có delimiter, để khỏi cản người gõ thường
+            if (/[|\n\t;]/.test(secretInput.value)) maybeAutoParse();
+        });
+
+        // Nút × trên note preview → bỏ note
+        clearNoteBtn.addEventListener('click', () => setPendingNote(''));
+
+        // Nút Dán (lấy từ clipboard)
         pasteBtn.addEventListener('click', async () => {
             try {
                 if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
                     const text = await navigator.clipboard.readText();
                     secretInput.value = text.trim();
+                    maybeAutoParse();
                     secretInput.focus();
                     return;
                 }
@@ -433,10 +515,13 @@
             secretInput.focus();
         });
 
-        // Submit add
+        // Submit
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             clearError();
+
+            // last-chance parse phòng khi user paste mà event chưa fire
+            maybeAutoParse();
 
             const secret = secretInput.value.trim();
             if (!secret) { showError('Hãy nhập secret 2FA.'); return; }
@@ -450,7 +535,7 @@
                 return;
             }
 
-            const item = { id: genId(), type: selectedType, secret, note: '' };
+            const item = { id: genId(), type: selectedType, secret, note: pendingNote };
             items.push(item);
             saveItems();
             renderList();
@@ -462,7 +547,6 @@
                 ok ? 'success' : 'error'
             );
 
-            // highlight nút copy của item mới
             const newRoot = listEl.querySelector(`.totp-item[data-id="${CSS.escape(item.id)}"]`);
             if (newRoot) {
                 const btn = newRoot.querySelector('[data-role="copy"]');
@@ -472,7 +556,9 @@
                 }
             }
 
+            // reset form
             secretInput.value = '';
+            setPendingNote('');
             secretInput.focus();
         });
 

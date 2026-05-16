@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="assets/css/main.css?v=5.0.0">
+    <link rel="stylesheet" href="assets/css/main.css?v=5.1.0">
 </head>
 <body>
 
@@ -79,7 +79,7 @@
                                 id="secretInput"
                                 autocomplete="off"
                                 spellcheck="false"
-                                placeholder="VD: JBSWY3DPEHPK3PXP..."
+                                placeholder="Dán secret, hoặc cả chuỗi có dấu |"
                                 required
                                 autofocus
                             />
@@ -90,6 +90,19 @@
                                 </svg>
                             </button>
                         </div>
+                        <span class="totp-field__help">Tự nhận diện secret nếu paste cả chuỗi <code>email | pass | secret</code></span>
+                    </div>
+
+                    <div class="totp-note-preview" id="notePreview" hidden>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <span class="totp-note-preview__label">Note:</span>
+                        <span class="totp-note-preview__text" id="notePreviewText"></span>
+                        <button type="button" class="totp-note-preview__clear" id="clearNoteBtn" aria-label="Bỏ note">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
                     </div>
 
                     <button type="submit" class="totp-btn-primary" id="submitBtn">
@@ -124,6 +137,6 @@
     <div class="totp-toast" id="toast" hidden></div>
 </main>
 
-<script src="assets/js/totp-generator.js?v=5.0.0"></script>
+<script src="assets/js/totp-generator.js?v=5.1.0"></script>
 </body>
 </html>

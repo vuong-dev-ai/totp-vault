@@ -291,6 +291,65 @@ button { font-family: inherit; }
 .totp-type__icon--discord  { background: var(--c-discord); }
 .totp-type__icon--other    { background: var(--c-other); }
 
+.totp-field__help {
+    font-size: 11.5px;
+    color: var(--text-mute);
+    line-height: 1.4;
+    padding: 0 2px;
+}
+.totp-field__help code {
+    font-family: var(--font-mono);
+    background: rgba(124, 92, 255, .12);
+    color: var(--text-dim);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+/* Note preview after smart-parse */
+.totp-note-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: rgba(124, 92, 255, .1);
+    border: 1px solid rgba(124, 92, 255, .35);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12.5px;
+    animation: slideIn .2s ease;
+}
+.totp-note-preview__label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--accent-2);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    flex-shrink: 0;
+}
+.totp-note-preview__text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim);
+}
+.totp-note-preview__clear {
+    background: transparent;
+    border: 0;
+    color: var(--text-mute);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    transition: .15s;
+}
+.totp-note-preview__clear:hover { background: rgba(255,255,255,.1); color: var(--text); }
+.totp-note-preview__clear:active { transform: scale(.9); }
+
 /* =========================================================================
    PRIMARY BUTTON
    ========================================================================= */
