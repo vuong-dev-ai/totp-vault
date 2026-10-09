@@ -277,6 +277,7 @@
     const listEl   = document.getElementById('list');
     const emptyEl  = document.getElementById('emptyState');
     const countEl  = document.getElementById('countBadge');
+    const clearAllEl = document.getElementById('clearAllBtn');
 
     // Search state (set by init's input handler)
     let searchQuery = '';
@@ -375,11 +376,13 @@
             listEl.innerHTML = '';
             emptyEl.hidden = false;
             countEl.textContent = '0';
+            clearAllEl.hidden = true;
             applySearch();
             return;
         }
         emptyEl.hidden = true;
         countEl.textContent = String(items.length);
+        clearAllEl.hidden = false;
         listEl.innerHTML = items.map(itemHtml).join('');
         updateAllCodes(true);
         applySearch();
@@ -465,6 +468,16 @@
         saveItems();
         renderList();
         showToast('Đã xóa 2FA', 'success');
+    }
+
+    function deleteAllItems() {
+        const n = items.length;
+        if (!n) return;
+        items = [];
+        lastCounters.clear();
+        saveItems();
+        renderList();
+        showToast(`Đã xóa toàn bộ ${n} 2FA`, 'success');
     }
 
     async function copyItemCode(id) {
@@ -689,6 +702,15 @@
             setPendingNote('');
             resetSearch();
             secretInput.focus();
+        });
+
+        // Nút Xóa tất cả
+        clearAllEl.addEventListener('click', () => {
+            if (!items.length) return;
+            if (confirm(`Xóa toàn bộ ${items.length} 2FA đã lưu?\nHành động này không thể hoàn tác.`)) {
+                deleteAllItems();
+                resetSearch();
+            }
         });
 
         // List click delegation
