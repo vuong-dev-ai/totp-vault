@@ -406,6 +406,27 @@ button { font-family: inherit; }
     text-align: center;
 }
 
+.totp-clear-all {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.totp-clear-all[hidden] { display: none; }
+.totp-clear-all:hover {
+    background: rgba(239, 68, 68, .15);
+    border-color: rgba(239, 68, 68, .4);
+    color: #fca5a5;
+}
+.totp-clear-all:active { transform: scale(.96); }
+
 .totp-list { display: grid; gap: 10px; }
 
 /* Search bar */
