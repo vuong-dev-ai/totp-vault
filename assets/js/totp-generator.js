@@ -141,6 +141,41 @@
                 note: it.note ?? it.label ?? ''
             }));
         } catch { items = []; }
+        const removed = dedupeItems();
+        if (removed) {
+            saveItems();
+            showToast(`Đã tự xóa ${removed} 2FA bị trùng`, 'success');
+        }
+    }
+
+    // Chuẩn hoá secret để so trùng (bỏ khoảng trắng, '=', không phân biệt hoa thường)
+    function normalizeSecret(s) {
+        return String(s ?? '').toUpperCase().replace(/\s+/g, '').replace(/=+$/, '');
+    }
+
+    function findBySecret(secret) {
+        const key = normalizeSecret(secret);
+        return items.find(it => normalizeSecret(it.secret) === key);
+    }
+
+    // Xoá các 2FA trùng secret, giữ bản đầu tiên (lấy note của bản sau nếu bản đầu trống).
+    // Trả về số bản đã xoá.
+    function dedupeItems() {
+        const seen = new Map();
+        const kept = [];
+        for (const it of items) {
+            const key = normalizeSecret(it.secret);
+            const first = seen.get(key);
+            if (first) {
+                if (!first.note && it.note) first.note = it.note;
+                continue;
+            }
+            seen.set(key, it);
+            kept.push(it);
+        }
+        const removed = items.length - kept.length;
+        items = kept;
+        return removed;
     }
 
     function saveItems() {
@@ -673,6 +708,26 @@
                 code = await totp(secret, PERIOD, DIGITS);
             } catch (err) {
                 showError(err.message || 'Secret không hợp lệ.');
+                return;
+            }
+
+            // Trùng secret → chỉ copy mã, không lưu thêm
+            const existing = findBySecret(secret);
+            if (existing) {
+                if (!existing.note && pendingNote) {
+                    existing.note = pendingNote;
+                    saveItems();
+                    refreshItemNote(existing.id);
+                }
+                const ok = await copyToClipboard(code);
+                showToast(
+                    ok ? `2FA đã có, chỉ copy mã: ${code}` : `2FA đã có (copy thất bại): ${code}`,
+                    ok ? 'success' : 'error'
+                );
+                secretInput.value = '';
+                setPendingNote('');
+                resetSearch();
+                secretInput.focus();
                 return;
             }
 
